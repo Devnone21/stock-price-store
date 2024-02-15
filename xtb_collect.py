@@ -2,18 +2,43 @@ from xtb_init import symbols, timeframes, accounts, user
 from xtb.XTBApi.api import Client
 from xtb.XTBApi.exceptions import CommandFailed
 from classes import Mongo
-from datetime import datetime
-import time
+from datetime import datetime, date, time, timedelta
+from time import sleep
 import logging
 logger = logging.getLogger('xtb.store')
 logger.setLevel(logging.DEBUG)
+
+
+class CandlesTime:
+    def __init__(self, symbol: str, timeframe: int) -> None:
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.name = f'real_{symbol}_{timeframe}'
+        now = datetime.utcnow()
+        self.max_backdate = now.date() - timedelta(days=12*timeframe)
+        self.last_backdate = now.date()
+
+    def get_candles_time(self, db: Mongo):
+        docs = db.find_all('candles_time')
+        for doc in docs:
+            if doc['candles'] == self.name:
+                self.last_backdate = date.fromisoformat(doc['last_backdate'])
+
+    def update_candles_time(self, db: Mongo):
+        doc = {
+            '_id': self.name,
+            'candles': self.name,
+            'last_backdate': self.last_backdate.isoformat()
+        }
+        db.upsert_one('candles_time', match={'candles': self.name}, data=doc)
+        # print(f"upsert: {n_upsert}, last_backdate: {self.last_backdate}")
 
 
 class Collection:
     def __init__(self, db: Mongo) -> None:
         self.db = db
 
-    def store_market_hours(self, client):
+    def collect_market_hours(self, client):
         res = client.get_trading_hours(symbols)
         logger.debug(f'recv market_hours {len(res)} symbols.')
         if not res:
@@ -23,18 +48,32 @@ class Collection:
             data=[dict(d, **{'_id': d.get('symbol')}) for d in res]
         )
 
-    def store_candles(self, client, symbol, timeframe):
+    def collect_candles(self, client, symbol: str, timeframe: int):
+        ct = CandlesTime(symbol, timeframe)
+        ct.get_candles_time(self.db)
+        if ct.last_backdate < ct.max_backdate:
+            return
         # get charts
-        now = int(datetime.now().timestamp())
-        res = client.get_chart_range_request(symbol, timeframe, now, now, -100) if client else {}
+        ts = int(datetime.combine(ct.last_backdate, time(0, 0)).timestamp())
+        res = client.get_chart_range_request(symbol, timeframe, ts, ts, -300) if client else {}
         rate_infos = res.get('rateInfos', [])
-        logger.debug(f'recv {symbol}_{timeframe} {len(rate_infos)} ticks.')
+        logger.info(f'recv {symbol}_{timeframe} {len(rate_infos)} ticks.')
         if not rate_infos:
             return
         # store in DB/Cache
-        self.db.insert_list_of_dict(
+        n_inserted = self.db.insert_list_of_dict(
             collection=f'real_{symbol}_{timeframe}',
             data=[dict(d, **{'_id': d.get('ctm')}) for d in rate_infos]
+        )
+        # update last backdate
+        least_ts = min([int(c['ctm']) for c in rate_infos]) / 1000
+        if n_inserted >= 0:
+            ct.last_backdate = date.fromtimestamp(least_ts) + timedelta(days=1)
+            ct.update_candles_time(self.db)
+        # summary
+        logger.info(
+            f'store {symbol}_{timeframe}: {n_inserted} ticks. ' +
+            f'backdate: {ct.last_backdate.isoformat()}'
         )
 
 
@@ -58,21 +97,22 @@ def collect() -> None:
     collection = Collection(db)
 
     # Collect market hours if not fully available
-    market = collection.db.find_in('market_hours')
+    market = collection.db.find_all('market_hours')
     set_market = {doc['symbol'] for doc in market} if market else set()
     if not set(symbols).issubset(set_market):
-        collection.store_market_hours(client=xtb)
+        collection.collect_market_hours(client=xtb)
 
     # Collect candles
     for symbol in symbols:
         for timeframe in timeframes:
-            collection.store_candles(
+            collection.collect_candles(
                 client=xtb,
                 symbol=symbol,
                 timeframe=timeframe,
             )
+            sleep(1)
         # Delay before next symbol
-        time.sleep(5)
+        sleep(3)
 
     xtb.logout()
 

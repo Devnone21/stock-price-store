@@ -43,7 +43,7 @@ logging.config.dictConfig(_logging_json)
 accounts: dict = json.load(open('xtb/account.json'))
 
 user = '50155431'
-# symbols = ['GOLD', 'GOLD.FUT', 'OIL.WTI', 'USDJPY', 'BITCOIN']
-# timeframes = [15, 30, 60]
-symbols = ['GOLD', 'GOLD.FUT']
-timeframes = [15, 30]
+symbols = ['GOLD', 'GOLD.FUT', 'OIL.WTI', 'USDJPY', 'BITCOIN']
+timeframes = [15, 30, 60]
+# symbols = ['GOLD', 'GOLD.FUT']
+# timeframes = [15, 30]
