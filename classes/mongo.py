@@ -20,9 +20,10 @@ class Mongo:
     def find_all(self, collection: str):
         try:
             db_collection = self.db[collection]
-            res = db_collection.find()
-            if res:
-                logger.debug(f'({collection}) found')
+            with db_collection.find() as cursor:
+                res = [doc for doc in cursor]
+                if res:
+                    logger.debug(f'({collection}) found')
             return res
         except TypeError as err:
             logger.error(err)

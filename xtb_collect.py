@@ -114,6 +114,7 @@ def collect() -> None:
         # Delay before next symbol
         sleep(3)
 
+    db.client.close()
     xtb.logout()
 
 
