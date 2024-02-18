@@ -53,11 +53,19 @@ class Collection:
         ct.get_candles_time(self.db)
         if ct.last_backdate < ct.max_backdate:
             return
-        # get charts
-        ts = int(datetime.combine(ct.last_backdate, time(0, 0)).timestamp())
-        res = client.get_chart_range_request(symbol, timeframe, ts, ts, -300) if client else {}
+        # get present charts
+        ts = int(datetime.utcnow().timestamp())
+        res = client.get_chart_range_request(symbol, timeframe, ts, ts, -100) if client else {}
         rate_infos = res.get('rateInfos', [])
         logger.info(f'recv {symbol}_{timeframe} {len(rate_infos)} ticks.')
+        # get backdate charts
+        sleep(1)
+        ts = int(datetime.combine(ct.last_backdate, time(0, 0)).timestamp())
+        res = client.get_chart_range_request(symbol, timeframe, ts, ts, -500) if client else {}
+        backdate_infos = res.get('rateInfos', [])
+        logger.info(f'recv {symbol}_{timeframe} {len(backdate_infos)} backdate ticks.')
+        # combine received charts
+        rate_infos.extend(backdate_infos)
         if not rate_infos:
             return
         # store in DB/Cache
