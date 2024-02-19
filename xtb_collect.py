@@ -53,14 +53,14 @@ class Collection:
     def collect_candles(self, client, symbol: str, timeframe: int):
         ct = CandlesTime(symbol, timeframe)
         ct.get_candles_time(self.db)
-        if ct.last_backdate <= ct.max_backdate:
-            return
         # get present charts
         ts = int(datetime.utcnow().timestamp())
         res = client.get_chart_range_request(symbol, timeframe, ts, ts, -100) if client else {}
         rate_infos = res.get('rateInfos', [])
         logger.info(f'recv {symbol}_{timeframe} {len(rate_infos)} ticks.')
         # get backdate charts
+        if ct.last_backdate <= ct.max_backdate:
+            return
         sleep(1)
         ts = int(datetime.combine(ct.last_backdate, time(0, 0)).timestamp())
         res = client.get_chart_range_request(symbol, timeframe, ts, ts, -500) if client else {}
