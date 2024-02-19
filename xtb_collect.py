@@ -17,6 +17,8 @@ class CandlesTime:
         now = datetime.utcnow()
         self.max_backdate = now.date() - timedelta(days=12*timeframe)
         self.last_backdate = now.date()
+        if timeframe == 30:
+            self.max_backdate = max(self.max_backdate, date(2023, 7, 21))
 
     def get_candles_time(self, db: Mongo):
         docs = db.find_all('candles_time')
@@ -51,7 +53,7 @@ class Collection:
     def collect_candles(self, client, symbol: str, timeframe: int):
         ct = CandlesTime(symbol, timeframe)
         ct.get_candles_time(self.db)
-        if ct.last_backdate < ct.max_backdate:
+        if ct.last_backdate <= ct.max_backdate:
             return
         # get present charts
         ts = int(datetime.utcnow().timestamp())
