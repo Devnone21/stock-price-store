@@ -60,16 +60,17 @@ class Collection:
         rate_infos = res.get('rateInfos', [])
         logger.info(f'recv {symbol}_{timeframe} {len(rate_infos)} ticks.')
         # get backdate charts
-        least_ts = 0
-        if ct.last_backdate > ct.max_backdate:
+        min_ts = 0
+        if ct.max_backdate < ct.last_backdate:
             sleep(1)
             ts = int(datetime.combine(ct.last_backdate, time(0, 0)).timestamp())
             res = client.get_chart_range_request(symbol, timeframe, ts, ts, -500) if client else {}
             backdate_infos = res.get('rateInfos', [])
-            least_ts = min([int(c['ctm']) for c in backdate_infos]) / 1000
+            min_ts = min([int(c['ctm']) for c in backdate_infos]) / 1000
             logger.info(f'recv {symbol}_{timeframe} {len(backdate_infos)} backdate ticks.')
             # combine received charts
             rate_infos.extend(backdate_infos)
+
         if not rate_infos:
             return
 
@@ -79,8 +80,8 @@ class Collection:
             data=[dict(d, **{'_id': d.get('ctm')}) for d in rate_infos]
         )
         # update last backdate
-        if n_inserted >= 0 and least_ts > 0:
-            ct.last_backdate = date.fromtimestamp(least_ts) + timedelta(days=1)
+        if n_inserted >= 0 and min_ts > datetime(2020, 7, 1).timestamp():
+            ct.last_backdate = date.fromtimestamp(min_ts) + timedelta(days=1)
             ct.update_candles_time(self.db)
         # summary
         logger.info(
