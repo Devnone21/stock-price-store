@@ -2,7 +2,7 @@ from xtb_init import symbols, timeframes, accounts, user
 from xtb.XTBApi.api import Client
 from xtb.XTBApi.exceptions import CommandFailed
 from classes import Mongo
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time, timedelta, timezone
 from time import sleep
 import logging
 logger = logging.getLogger('xtb.store')
@@ -14,7 +14,7 @@ class CandlesTime:
         self.symbol = symbol
         self.timeframe = timeframe
         self.name = f'real_{symbol}_{timeframe}'
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self.max_backdate = now.date() - timedelta(days=12*timeframe)
         self.last_backdate = now.date()
         if timeframe == 30:
@@ -55,8 +55,8 @@ class Collection:
         ct.get_candles_time(self.db)
 
         # get present charts
-        ts = int(datetime.utcnow().timestamp())
-        res = client.get_chart_range_request(symbol, timeframe, ts, ts, -100) if client else {}
+        ts = int(datetime.now(timezone.utc).timestamp())
+        res = client.get_chart_range_request(symbol, timeframe, ts, ts, -300) if client else {}
         rate_infos = res.get('rateInfos', [])
         logger.info(f'recv {symbol}_{timeframe} {len(rate_infos)} ticks.')
         # get backdate charts
